@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "770731489843",
+    "project_id": "aonlims-3f8dc",
+    "storage_bucket": "aonlims-3f8dc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:770731489843:android:8d705e2e8d29a89db3c146",
+        "android_client_info": {
+          "package_name": "com.aondigicon.esllims"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBrJ941XQEUKreU-tCd-b6ckD6dGPejrBE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

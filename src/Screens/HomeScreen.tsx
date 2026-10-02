@@ -2,6 +2,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import LabGrid from "@/components/LabGrid";
 import { colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
 
@@ -33,34 +34,8 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Your Profile</Text>
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>User ID</Text>
-            <Text style={styles.rowValue}>{user.userName}</Text>
-          </View>
-          <View style={styles.divider} />
-
-          <View style={styles.row}>
-            <Text style={styles.rowLabel}>Role</Text>
-            <Text style={styles.rowValue}>{user.role}</Text>
-          </View>
-          <View style={styles.divider} />
-
-          <View style={styles.labRow}>
-            <Text style={styles.rowLabel}>
-              {user.labLocations.length > 1 ? "Lab Locations" : "Lab Location"}
-            </Text>
-            <View style={styles.chips}>
-              {user.labLocations.map((lab) => (
-                <View key={lab} style={styles.chip}>
-                  <Text style={styles.chipText}>{lab}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        </View>
+        <Text style={styles.sectionTitle}>Labs</Text>
+        <LabGrid userLabs={user.labLocations} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -127,58 +102,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.5,
   },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    padding: 20,
-    boxShadow: `0 8px 24px ${colors.shadowNeutral}`,
-  },
-  cardTitle: {
+  sectionTitle: {
     color: colors.textPrimary,
     fontSize: 18,
     fontWeight: "700",
-    marginBottom: 8,
-  },
-  row: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: 14,
-  },
-  labRow: {
-    paddingVertical: 14,
-  },
-  rowLabel: {
-    color: colors.textSecondary,
-    fontSize: 14,
-  },
-  rowValue: {
-    color: colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "600",
-    flexShrink: 1,
-    textAlign: "right",
-    marginLeft: 12,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.divider,
-  },
-  chips: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-    marginTop: 10,
-  },
-  chip: {
-    backgroundColor: colors.accentSoft,
-    borderRadius: 999,
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-  },
-  chipText: {
-    color: colors.accent,
-    fontSize: 13,
-    fontWeight: "600",
+    marginBottom: 12,
   },
 });

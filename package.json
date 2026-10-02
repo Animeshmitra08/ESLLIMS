@@ -4,7 +4,12 @@
   "version": "1.0.0",
   "dependencies": {
     "@expo/ui": "~57.0.21",
+    "@notifee/react-native": "^9.1.8",
+    "@react-native-firebase/app": "^26.4.0",
+    "@react-native-firebase/messaging": "^26.4.0",
+    "axios": "^1.20.0",
     "expo": "~57.0.26",
+    "expo-application": "~57.0.3",
     "expo-constants": "~57.0.20",
     "expo-dev-client": "~57.0.19",
     "expo-device": "~57.0.2",

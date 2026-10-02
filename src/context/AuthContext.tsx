@@ -8,6 +8,11 @@ import {
 
 import { authenticate, findUser, type AuthUser } from "@/services/auth";
 import {
+  initializeNotifications,
+  resetNotificationService,
+  setCurrentUserForNotifications,
+} from "@/services/NotificationService";
+import {
   clearSession,
   loadSessionUserName,
   saveSessionUserName,
@@ -46,6 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     })();
   }, []);
 
+  // Register this device for push notifications whenever someone is logged
+  // in, whether they just signed in or their saved session was restored.
+  useEffect(() => {
+    if (!user) return;
+    setCurrentUserForNotifications(user);
+    initializeNotifications().catch((e) =>
+      console.warn("Failed to initialize notifications", e)
+    );
+  }, [user]);
+
   const signIn = async (userId: string, password: string) => {
     const result = authenticate(userId, password);
     if (!result) return false;
@@ -64,6 +79,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await clearSession();
     } catch (e) {
       console.warn("Failed to clear session", e);
+    }
+    try {
+      await resetNotificationService();
+    } catch (e) {
+      console.warn("Failed to reset notifications", e);
     }
     setUser(null);
   };

@@ -28,6 +28,27 @@ export const palette = {
 
   red50: "#FEF2F2",
   red600: "#DC2626",
+
+  violet50: "#F5F3FF",
+  violet600: "#7C3AED",
+  orange50: "#FFF7ED",
+  orange600: "#EA580C",
+  emerald50: "#ECFDF5",
+  emerald600: "#059669",
+  amber50: "#FFFBEB",
+  amber600: "#D97706",
+  teal50: "#F0FDFA",
+  teal600: "#0D9488",
+} as const;
+
+/** Tint pairs for telling categories apart (e.g. the lab tiles). */
+export const categoryColors = {
+  blue: { tint: palette.blue600, soft: palette.blue50 },
+  violet: { tint: palette.violet600, soft: palette.violet50 },
+  orange: { tint: palette.orange600, soft: palette.orange50 },
+  emerald: { tint: palette.emerald600, soft: palette.emerald50 },
+  amber: { tint: palette.amber600, soft: palette.amber50 },
+  teal: { tint: palette.teal600, soft: palette.teal50 },
 } as const;
 
 export const colors = {
