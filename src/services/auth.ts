@@ -1,49 +1,73 @@
-import userRoles from "../../jsondata/UserRole.json";
+import { isAxiosError } from "axios";
 
-import { COMMON_PASSWORD } from "@/constants/auth";
-
-type UserRoleRecord = {
-  USER_NAME: string;
-  ROLE_NAME: string;
-  lab_Location?: string;
-};
+import { LoginApi } from "@/services/ApiServices";
 
 export type AuthUser = {
+  /** The user name typed at login, shown in the app. */
   userName: string;
+  userId: string;
   role: string;
-  labLocations: string[];
+  roleId: string;
+  companyId: string;
+  companyName: string;
 };
 
-const normalize = (value: string) => value.trim().toLowerCase();
+export type AuthSession = {
+  user: AuthUser;
+  /** Sent as `Authorization: Bearer <token>` on application API calls. */
+  token: string;
+  tokenExpiry: string | null;
+};
 
-/** Checks the shared password and looks up the user in UserRole.json. */
-export function authenticate(userId: string, password: string): AuthUser | null {
-  if (password !== COMMON_PASSWORD) return null;
-  return findUser(userId);
-}
+const DEFAULT_ERROR = "Invalid User ID or Password.";
+
+/** Turns whatever the login call rejected with into a message for the user. */
+const toLoginErrorMessage = (error: unknown): string => {
+  // No server response at all: offline, DNS, TLS, or timeout.
+  if (isAxiosError(error)) return "Can't reach the server. Check your connection and try again.";
+  if (typeof error === "string" && error.trim()) return error.trim();
+  if (error && typeof error === "object") {
+    const body = error as Record<string, unknown>;
+    const message = body.message ?? body.Message ?? body.title;
+    if (typeof message === "string" && message.trim()) return message.trim();
+  }
+  return DEFAULT_ERROR;
+};
 
 /**
- * Looks up a user in UserRole.json. User IDs are matched ignoring case and
- * surrounding spaces. Records without a usable user name or lab location are
- * ignored.
+ * Logs in with the application API. Resolves with the user and token, or
+ * rejects with an Error whose message can be shown on the login screen.
  */
-export function findUser(userId: string): AuthUser | null {
-  const target = normalize(userId);
-  const record = (userRoles as UserRoleRecord[]).find(
-    (r) =>
-      normalize(r.USER_NAME) === target &&
-      target !== "" &&
-      target !== "@" &&
-      !!r.lab_Location?.trim()
-  );
-  if (!record) return null;
+export async function login(userName: string, password: string): Promise<AuthSession> {
+  const name = userName.trim();
+
+  let response;
+  try {
+    response = await LoginApi(name, password);
+  } catch (error) {
+    throw new Error(toLoginErrorMessage(error));
+  }
+
+  const data = response?.userData;
+  if (!data?.token) throw new Error(toLoginErrorMessage(response));
 
   return {
-    userName: record.USER_NAME.trim(),
-    role: record.ROLE_NAME.trim(),
-    labLocations: record
-      .lab_Location!.split(",")
-      .map((lab) => lab.trim())
-      .filter(Boolean),
+    user: {
+      userName: name,
+      userId: data.UserId,
+      role: data.RoleName,
+      roleId: data.RoleId,
+      companyId: data.CompanyId,
+      companyName: data.CompanyName,
+    },
+    token: data.token,
+    tokenExpiry: response.tokenExpiryDate ?? null,
   };
 }
+
+/** True if the expiry date has passed. Unknown or unparseable dates count as valid. */
+export const isTokenExpired = (tokenExpiry: string | null) => {
+  if (!tokenExpiry) return false;
+  const expiresAt = Date.parse(tokenExpiry);
+  return !Number.isNaN(expiresAt) && expiresAt <= Date.now();
+};

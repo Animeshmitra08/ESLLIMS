@@ -75,8 +75,10 @@ export default function LoginScreen() {
     setError(null);
     setLoading(true);
     // On success the route guard in _layout.tsx switches to the home screen.
-    if (!(await signIn(userId, password))) {
-      setError("Invalid User ID or Password.");
+    try {
+      await signIn(userId, password);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Login failed. Please try again.");
       setLoading(false);
     }
   };

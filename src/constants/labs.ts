@@ -5,7 +5,6 @@ import { categoryColors } from "@/constants/colors";
 export type Lab = {
   /** Used in the URL: /lab/<id> */
   id: string;
-  /** Matches the lab_Location values in jsondata/UserRole.json. */
   name: string;
   icon: SymbolViewProps["name"];
   color: (typeof categoryColors)[keyof typeof categoryColors];

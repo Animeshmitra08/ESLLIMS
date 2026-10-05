@@ -1,21 +1,34 @@
-import { Alert, Image, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Image,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ColorValue,
+} from "react-native";
 import {
   Drawer,
   DrawerContentScrollView,
   DrawerItemList,
   type DrawerContentComponentProps,
 } from "expo-router/drawer";
+import { router } from "expo-router";
 import { SymbolView, type SymbolViewProps } from "expo-symbols";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useNotifications, useNotificationSync } from "@/hooks/useNotifications";
 
 type DrawerScreen = {
   /** Route file name in src/app/(drawer), without the extension. */
   name: string;
   title: string;
   icon: SymbolViewProps["name"];
+  /** Show the unread notification count next to the label. */
+  showUnreadCount?: boolean;
 };
 
 /**
@@ -33,13 +46,28 @@ const DRAWER_SCREENS: DrawerScreen[] = [
     title: "Home",
     icon: { ios: "house", android: "home", web: "home" },
   },
+  {
+    name: "notifications",
+    title: "Notifications",
+    icon: { ios: "bell", android: "notifications", web: "notifications" },
+    showUnreadCount: true,
+  },
+  {
+    name: "send-notification",
+    title: "Send Notification",
+    icon: { ios: "paperplane", android: "send", web: "send" },
+  },
 ];
 
 export default function DrawerNavigation() {
+  // This layout only renders while logged in.
+  useNotificationSync();
+
   return (
     <Drawer
       drawerContent={(props) => <DrawerContent {...props} />}
       screenOptions={{
+        headerRight: () => <NotificationBell />,
         headerStyle: { backgroundColor: colors.surface },
         headerTintColor: colors.textPrimary,
         headerTitleStyle: { fontWeight: "700" },
@@ -59,13 +87,60 @@ export default function DrawerNavigation() {
           name={screen.name}
           options={{
             title: screen.title,
+            drawerLabel: screen.showUnreadCount
+              ? ({ color }) => <UnreadLabel title={screen.title} color={color} />
+              : screen.title,
             drawerIcon: ({ color, size }) => (
               <SymbolView name={screen.icon} tintColor={color} size={size} />
             ),
+            // The bell would just link to the screen you're on.
+            ...(screen.name === "notifications" && { headerRight: undefined }),
           }}
         />
       ))}
     </Drawer>
+  );
+}
+
+const formatCount = (count: number) => (count > 99 ? "99+" : String(count));
+
+function NotificationBell() {
+  const { unreadCount } = useNotifications();
+  return (
+    <Pressable
+      onPress={() => router.push("/notifications")}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={
+        unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"
+      }
+      style={({ pressed }) => [styles.bell, pressed && styles.logoutPressed]}
+    >
+      <SymbolView
+        name={{ ios: "bell", android: "notifications", web: "notifications" }}
+        tintColor={colors.textPrimary}
+        size={24}
+      />
+      {unreadCount > 0 && (
+        <View style={styles.bellBadge}>
+          <Text style={styles.badgeText}>{formatCount(unreadCount)}</Text>
+        </View>
+      )}
+    </Pressable>
+  );
+}
+
+function UnreadLabel({ title, color }: { title: string; color: ColorValue }) {
+  const { unreadCount } = useNotifications();
+  return (
+    <View style={styles.labelRow}>
+      <Text style={[styles.label, { color }]}>{title}</Text>
+      {unreadCount > 0 && (
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{formatCount(unreadCount)}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -102,7 +177,7 @@ function DrawerContent(props: DrawerContentComponentProps) {
                 {user.userName}
               </Text>
               <Text style={styles.meta} numberOfLines={2}>
-                {user.role} · {user.labLocations.join(", ")}
+                {user.role}
               </Text>
             </>
           )}
@@ -199,5 +274,46 @@ const styles = StyleSheet.create({
     color: colors.error,
     fontSize: 15,
     fontWeight: "600",
+  },
+  bell: {
+    marginRight: 16,
+    padding: 4,
+  },
+  bellBadge: {
+    position: "absolute",
+    top: 0,
+    right: -2,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 4,
+    backgroundColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  labelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  label: {
+    fontSize: 15,
+    fontWeight: "600",
+  },
+  badge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    paddingHorizontal: 6,
+    backgroundColor: colors.error,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  badgeText: {
+    color: colors.textOnPrimary,
+    fontSize: 11,
+    fontWeight: "700",
   },
 });

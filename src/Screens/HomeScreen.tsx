@@ -35,7 +35,7 @@ export default function HomeScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>Labs</Text>
-        <LabGrid userLabs={user.labLocations} />
+        <LabGrid />
       </ScrollView>
     </SafeAreaView>
   );

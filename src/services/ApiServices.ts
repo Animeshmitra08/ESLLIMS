@@ -1,5 +1,7 @@
 import axios, { isAxiosError } from "axios";
 
+import type { LoginResponse } from "@/types/LoginTypes";
+
 export type FirebaseTokenTypes = {
   id?: string;
   deviceId: string;
@@ -20,17 +22,71 @@ export type SendNotificationRequest = {
   data?: Record<string, string>;
 };
 
-const API_BASE = process.env.EXPO_PUBLIC_NOTIFICATION_URL;
+export type LoginRequest = {
+  appid: string;
+  userName: string;
+  password: string;
+  rememberPassword: boolean;
+};
 
-if (!API_BASE) {
-  console.warn("EXPO_PUBLIC_NOTIFICATION_URL is not set; notification API calls will fail.");
+const API_BASE = process.env.EXPO_PUBLIC_NOTIFICATION_URL;
+const APPLICATION_URL = process.env.EXPO_PUBLIC_APPLICATION_URL;
+const APP_ID = process.env.EXPO_PUBLIC_APP_ID ?? "";
+
+if (!APP_ID) {
+  console.warn("EXPO_PUBLIC_APP_ID is not set; login will fail.");
 }
+
+const LOGIN_PATH = "/login";
 
 const notificationApi = axios.create({
   baseURL: API_BASE,
   timeout: 15000,
   headers: { "Content-Type": "application/json" },
 });
+
+const applicationApi = axios.create({
+  baseURL: APPLICATION_URL,
+  timeout: 15000,
+  headers: { "Content-Type": "application/json" },
+});
+
+// ─── Auth token for the application API ─────────────────────────────────────
+
+let authToken: string | null = null;
+let onUnauthorized: (() => void) | null = null;
+
+/** Set after login (or session restore); cleared on logout. */
+export const setAuthToken = (token: string | null) => {
+  authToken = token;
+};
+
+/** Called once when an application API request is rejected with 401. */
+export const setUnauthorizedHandler = (handler: (() => void) | null) => {
+  onUnauthorized = handler;
+};
+
+// Every application API call except login carries the login token.
+applicationApi.interceptors.request.use((config) => {
+  if (authToken && config.url !== LOGIN_PATH) {
+    config.headers.Authorization = `Bearer ${authToken}`;
+  }
+  return config;
+});
+
+// A 401 on an authenticated call means the token expired or was revoked, so
+// log the user out. The token is cleared first so parallel failing requests
+// only trigger this once.
+applicationApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401 && error.config?.url !== LOGIN_PATH && authToken) {
+      authToken = null;
+      onUnauthorized?.();
+    }
+    return Promise.reject(error);
+  }
+);
 
 notificationApi.interceptors.response.use(
   (response) => response,
@@ -78,3 +134,34 @@ export const postNotification = async (data: SendNotificationRequest) => {
     throw toApiError(error);
   }
 };
+
+
+
+//Application Api functions--------------
+
+/** The only application API call sent without the Bearer token. */
+export const LoginApi = async (userName: string, password: string) => {
+  const body: LoginRequest = {
+    appid: APP_ID,
+    userName,
+    password,
+    rememberPassword: false,
+  };
+  try {
+    const res = await applicationApi.post<LoginResponse>(LOGIN_PATH, body, {
+      headers: { appid: APP_ID },
+    });
+    return res.data;
+  } catch (error) {
+    throw toApiError(error);
+  }
+};
+
+export const SampleApi = async (data: string) => {
+  try {
+    const res = await applicationApi.post("/ErpServices?connection=LimsSql&method=SampleAll", data);
+    return res.data;
+  } catch (error) {
+    throw toApiError(error);
+  }
+}

@@ -1,23 +1,33 @@
 import { Platform } from "react-native";
 import {
   deleteToken,
+  getInitialNotification,
   getMessaging,
   getToken,
   onMessage,
+  onNotificationOpenedApp,
   onTokenRefresh,
 } from "@react-native-firebase/messaging";
-import notifee, { AndroidImportance, AndroidStyle, EventType } from "@notifee/react-native";
+import notifee, { EventType } from "@notifee/react-native";
+import { isAxiosError } from "axios";
 import * as Application from "expo-application";
 import * as Device from "expo-device";
 
 import type { AuthUser } from "@/services/auth";
 import { postTokenToDatabase } from "@/services/ApiServices";
+import {
+  ensureNotificationChannel,
+  fromRemoteMessage,
+  openNotifeeNotification,
+  openRemoteMessage,
+  saveAndDisplay,
+} from "@/services/notificationHandlers";
 
-/** Android channel for app notifications. Send this as `channelId` from the backend. */
-export const NOTIFICATION_CHANNEL_ID = "esllims_default";
+export { NOTIFICATION_CHANNEL_ID } from "@/services/notificationHandlers";
 
 let currentUser: AuthUser | null = null;
 let initialized = false;
+let checkedInitialNotification = false;
 let unsubscribers: (() => void)[] = [];
 
 export const setCurrentUserForNotifications = (user: AuthUser | null) => {
@@ -30,10 +40,28 @@ const getDeviceId = async () => {
   return "unknown";
 };
 
+/** If the app was launched by tapping a notification, open it. Runs once per launch. */
+const handleLaunchNotification = async () => {
+  if (checkedInitialNotification) return;
+  checkedInitialNotification = true;
+
+  // Displayed by Android/iOS from an FCM notification payload.
+  const remote = await getInitialNotification(getMessaging());
+  if (remote) {
+    await openRemoteMessage(remote);
+    return;
+  }
+  // Displayed by Notifee (data-only messages).
+  const local = await notifee.getInitialNotification();
+  if (local) openNotifeeNotification(local.notification);
+};
+
 /**
- * Asks for permission, registers the device's FCM token with the backend for
- * the current user, and shows notifications that arrive while the app is open.
- * Call after login (or after a saved session is restored).
+ * Asks for permission, saves and shows notifications that arrive while the
+ * app is open, handles taps, and registers the device's FCM token with the
+ * backend for the current user. Call after login (or session restore).
+ *
+ * Background and closed-app messages are handled in backgroundNotifications.ts.
  */
 export const initializeNotifications = async () => {
   if (!currentUser) {
@@ -50,50 +78,47 @@ export const initializeNotifications = async () => {
   initialized = true;
   const messaging = getMessaging();
 
+  // Listeners and the launch check come first so they don't wait on the
+  // permission prompt or the network call below.
+  unsubscribers.push(
+    // FCM doesn't display notifications while the app is in the foreground,
+    // so save them and show them with Notifee.
+    onMessage(messaging, (message) =>
+      saveAndDisplay(fromRemoteMessage(message)).catch((e) =>
+        console.warn("Failed to handle foreground notification", e)
+      )
+    ),
+
+    // Tap on a system-displayed notification while the app was in the background.
+    onNotificationOpenedApp(messaging, (message) => {
+      openRemoteMessage(message).catch((e) => console.warn("Failed to open notification", e));
+    }),
+
+    // Tap on a Notifee notification while the app is open.
+    notifee.onForegroundEvent(({ type, detail }) => {
+      if (type === EventType.PRESS || type === EventType.ACTION_PRESS) {
+        openNotifeeNotification(detail.notification);
+      }
+    })
+  );
+
+  await handleLaunchNotification().catch((e) =>
+    console.warn("Failed to check launch notification", e)
+  );
+
   // Covers iOS and Android 13+ (Firebase's own requestPermission is deprecated).
   await notifee.requestPermission();
-
-  await notifee.createChannel({
-    id: NOTIFICATION_CHANNEL_ID,
-    name: "ESL LIMS Notifications",
-    importance: AndroidImportance.HIGH,
-  });
+  await ensureNotificationChannel();
 
   const deviceId = await getDeviceId();
 
   // Always register on init so the backend links this device's token to the
   // user who just logged in, even if the token itself hasn't changed.
+  unsubscribers.push(
+    onTokenRefresh(messaging, (newToken: string) => sendTokenToBackend(newToken, deviceId))
+  );
   const token = await getToken(messaging);
   if (token) await sendTokenToBackend(token, deviceId);
-
-  unsubscribers.push(
-    onTokenRefresh(messaging, (newToken: string) => sendTokenToBackend(newToken, deviceId)),
-
-    // FCM doesn't display notifications while the app is in the foreground,
-    // so show them with Notifee.
-    onMessage(messaging, async (remoteMessage) => {
-      const title = remoteMessage.notification?.title ?? String(remoteMessage.data?.title ?? "");
-      const body = remoteMessage.notification?.body ?? String(remoteMessage.data?.body ?? "");
-
-      await notifee.displayNotification({
-        title,
-        body,
-        data: remoteMessage.data as Record<string, string> | undefined,
-        android: {
-          channelId: NOTIFICATION_CHANNEL_ID,
-          pressAction: { id: "default", launchActivity: "default" },
-          style: { type: AndroidStyle.BIGTEXT, text: body },
-        },
-      });
-    }),
-
-    notifee.onForegroundEvent(({ type, detail }) => {
-      if (type === EventType.PRESS) {
-        // TODO: navigate based on detail.notification?.data
-        console.log("Notification pressed", detail.notification?.data);
-      }
-    })
-  );
 
   console.log("Notifications initialized");
 };
@@ -101,18 +126,35 @@ export const initializeNotifications = async () => {
 const sendTokenToBackend = async (token: string, deviceId: string) => {
   if (!currentUser) return;
 
+  // userlog carries the user's details as a JSON string, e.g.
+  // {"USER_NAME":"104041","ROLE_NAME":"ANALYST"}
+  const userlog = JSON.stringify({
+    USER_NAME: currentUser.userName,
+    ROLE_NAME: currentUser.role,
+  });
+
+  const payload = {
+    deviceId,
+    firebaseToken: token,
+    userlog,
+    loggedBy: currentUser.userName,
+    lastLoginBy: currentUser.userName,
+    status: 0
+  }
+
+  console.log(payload);
+  
+
   try {
-    await postTokenToDatabase({
-      deviceId,
-      firebaseToken: token,
-      userlog: currentUser.userName,
-      loggedBy: currentUser.userName,
-      lastLoginBy: currentUser.userName,
-      status: 0,
-    });
-    console.log("FCM token saved");
+    await postTokenToDatabase(payload);
+    console.log("FCM token saved", payload);
   } catch (error) {
-    console.warn("FCM token save failed:", error);
+    // Axios errors with no response (connection failed or timed out) only say
+    // "Network Error"; include the code and URL so the cause is traceable.
+    const detail = isAxiosError(error)
+      ? `${error.code ?? ""} ${error.message} → ${error.config?.baseURL ?? ""}${error.config?.url ?? ""}`
+      : error;
+    console.warn("FCM token save failed:", detail);
   }
 };
 
@@ -124,6 +166,7 @@ export const resetNotificationService = async () => {
 
   if (!initialized) return;
   initialized = false;
+  await notifee.cancelAllNotifications();
   // Deleting the token means the next login gets a fresh one, so the backend
   // can't keep pushing to this device for the user who logged out.
   await deleteToken(getMessaging());

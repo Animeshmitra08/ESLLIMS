@@ -6,22 +6,21 @@ import {
   type ReactNode,
 } from "react";
 
-import { authenticate, findUser, type AuthUser } from "@/services/auth";
+import { setAuthToken, setUnauthorizedHandler } from "@/services/ApiServices";
+import { isTokenExpired, login, type AuthUser } from "@/services/auth";
 import {
   initializeNotifications,
   resetNotificationService,
   setCurrentUserForNotifications,
 } from "@/services/NotificationService";
-import {
-  clearSession,
-  loadSessionUserName,
-  saveSessionUserName,
-} from "@/services/session";
+import { clearNotifications } from "@/services/notificationStore";
+import { clearSession, loadSession, saveSession } from "@/services/session";
 
 type AuthContextValue = {
   user: AuthUser | null;
   isRestoring: boolean;
-  signIn: (userId: string, password: string) => Promise<boolean>;
+  /** Rejects with an Error whose message can be shown to the user. */
+  signIn: (userName: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
 };
 
@@ -31,17 +30,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isRestoring, setIsRestoring] = useState(true);
 
-  // Restore the logged-in user from SecureStore. Only the user name is stored;
-  // role and lab are re-read from UserRole.json so changes there take effect,
-  // and a user removed from the file is logged out.
+  // Restore the saved user and token from SecureStore. An expired token is
+  // discarded so the user logs in again.
   useEffect(() => {
     (async () => {
       try {
-        const storedUserName = await loadSessionUserName();
-        if (storedUserName) {
-          const restored = findUser(storedUserName);
-          if (restored) setUser(restored);
-          else await clearSession();
+        const session = await loadSession();
+        if (session && !isTokenExpired(session.tokenExpiry)) {
+          console.log(session.token);
+          
+          setAuthToken(session.token);
+          setUser(session.user);
+        } else {
+          await clearSession();
         }
       } catch (e) {
         console.warn("Failed to restore session", e);
@@ -49,6 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setIsRestoring(false);
       }
     })();
+  }, []);
+
+  // When the API rejects the token (401), log out.
+  useEffect(() => {
+    setUnauthorizedHandler(() => {
+      signOut().catch((e) => console.warn("Failed to sign out", e));
+    });
+    return () => setUnauthorizedHandler(null);
   }, []);
 
   // Register this device for push notifications whenever someone is logged
@@ -61,20 +70,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }, [user]);
 
-  const signIn = async (userId: string, password: string) => {
-    const result = authenticate(userId, password);
-    if (!result) return false;
+  const signIn = async (userName: string, password: string) => {
+    const session = await login(userName, password);
+    setAuthToken(session.token);
     try {
-      await saveSessionUserName(result.userName);
+      await saveSession(session);
     } catch (e) {
       // Still log in for this session; the user just won't stay logged in.
       console.warn("Failed to save session", e);
     }
-    setUser(result);
-    return true;
+    setUser(session.user);
   };
 
   const signOut = async () => {
+    setAuthToken(null);
     try {
       await clearSession();
     } catch (e) {
@@ -82,6 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     try {
       await resetNotificationService();
+      // Saved notifications belong to the user who is logging out.
+      await clearNotifications();
     } catch (e) {
       console.warn("Failed to reset notifications", e);
     }
