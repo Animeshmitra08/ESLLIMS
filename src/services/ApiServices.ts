@@ -157,11 +157,17 @@ export const LoginApi = async (userName: string, password: string) => {
   }
 };
 
-export const SampleApi = async (data: string) => {
+export const SampleApi = async (data: string, connection: string, method: string) => {
   try {
-    const res = await applicationApi.post("/ErpServices?connection=LimsSql&method=SampleAll", data);
+    const res = await applicationApi.post(`/ErpServices?connection=${connection}&method=${method}`, data);
     return res.data;
   } catch (error) {
     throw toApiError(error);
   }
 }
+
+const LIMS_CONNECTION = "LimsSql";
+
+/** A SampleApi call on the LIMS connection, with the body sent as JSON. */
+export const fetchLims = <T,>(method: string, data: object): Promise<T> =>
+  SampleApi(JSON.stringify(data), LIMS_CONNECTION, method);

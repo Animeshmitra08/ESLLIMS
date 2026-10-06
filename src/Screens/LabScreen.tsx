@@ -1,58 +1,175 @@
-import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
-import { Stack, router, useLocalSearchParams } from "expo-router";
+import { useEffect, useState } from "react";
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import AlertDialog from "@/components/AlertDialog";
+import EmptyState from "@/components/EmptyState";
 import { colors } from "@/constants/colors";
-import { findLab } from "@/constants/labs";
-import { getForms } from "@/services/forms";
+import { useHierarchy } from "@/context/HierarchyContext";
+import { useLab } from "@/hooks/useLabs";
+import { useNotFoundAlert } from "@/hooks/useNotFoundAlert";
+import { fetchLims } from "@/services/ApiServices";
+import type { SubSbuTypes } from "@/types/DataTypes";
+
+const LAB_NOT_FOUND = {
+  title: "Lab not found",
+  message: "This lab doesn't exist or is no longer available.",
+  icon: { ios: "flask", android: "science", web: "science" },
+} as const;
+
+const EMPTY_ICON = { ios: "tray", android: "inbox", web: "inbox" } as const;
+
+// Opened from a deep link there is nothing to go back to, so go home instead.
+const goBack = () => {
+  if (router.canGoBack()) router.back();
+  else router.replace("/home");
+};
+
+function BackButton() {
+  return (
+    <Pressable
+      onPress={goBack}
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+      hitSlop={8}
+      style={({ pressed }) => [styles.backButton, pressed && styles.backButtonPressed]}
+    >
+      <SymbolView
+        name={{ ios: "chevron.left", android: "arrow_back", web: "arrow_back" }}
+        tintColor={colors.textPrimary}
+        size={20}
+      />
+    </Pressable>
+  );
+}
 
 export default function LabScreen() {
+  // `id` is the SBU Id passed from the lab grid.
   const { id } = useLocalSearchParams<{ id: string }>();
-  const lab = findLab(id);
+  const lab = useLab(id);
+  // While the labs are still loading, a missing lab just isn't known yet.
+  const { loading: labsLoading } = useHierarchy();
+  const insets = useSafeAreaInsets();
+  // null while loading.
+  const [subSbus, setSubSbus] = useState<SubSbuTypes[] | null>(null);
+
+  const labMissing = !lab && !labsLoading;
+  const itemsEmpty = !!lab && subSbus !== null && subSbus.length === 0;
+  const alert = useNotFoundAlert(
+    labMissing ? `lab:${id}` : itemsEmpty ? `items:${id}` : null
+  );
+
+  useEffect(() => {
+    if (!id) return;
+    // Ignore a late response if the screen closed or the lab changed.
+    let active = true;
+    fetchLims<unknown>("SubSBUACT", { DeptId: id })
+      .then((res) => {
+        if (active) setSubSbus(Array.isArray(res) ? res : []);
+      })
+      .catch((e) => {
+        console.warn("SubSBUACT failed", e);
+        if (active) setSubSbus([]);
+      });
+    return () => {
+      active = false;
+      setSubSbus(null);
+    };
+  }, [id]);
+
+  // With no navigation header, the screen pads itself clear of the status bar
+  // and home indicator.
+  const contentInsets = {
+    paddingTop: insets.top + 12,
+    paddingBottom: insets.bottom + 20,
+  };
 
   if (!lab) {
     return (
-      <View style={styles.center}>
-        <Stack.Screen options={{ title: "Lab not found" }} />
-        <Text style={styles.emptyText}>This lab doesn't exist.</Text>
+      <View style={[styles.root, styles.notFound, contentInsets]}>
+        <StatusBar style="dark" />
+        <BackButton />
+        <View style={styles.center}>
+          {labMissing ? (
+            <EmptyState
+              title={LAB_NOT_FOUND.title}
+              message={LAB_NOT_FOUND.message}
+              icon={LAB_NOT_FOUND.icon}
+              style={styles.notFoundCard}
+            />
+          ) : (
+            <ActivityIndicator color={colors.primary} />
+          )}
+        </View>
+        <AlertDialog
+          visible={alert.visible}
+          title={LAB_NOT_FOUND.title}
+          message={LAB_NOT_FOUND.message}
+          icon={LAB_NOT_FOUND.icon}
+          onClose={alert.dismiss}
+        />
       </View>
     );
   }
 
-  const forms = getForms();
+  const items = subSbus ?? [];
+  const emptyTitle = "No items found";
+  const emptyMessage = `There are no items under ${lab.name} yet.`;
 
   return (
     <>
-      <Stack.Screen options={{ title: lab.name }} />
+      <StatusBar style="dark" />
       <FlatList
         style={styles.root}
-        contentContainerStyle={styles.list}
-        data={forms}
-        keyExtractor={(form) => form.formId}
+        contentContainerStyle={[styles.list, contentInsets]}
+        data={items}
+        keyExtractor={(item) => item.Id}
         ListHeaderComponent={
-          <View style={styles.header}>
-            <View style={[styles.iconCircle, { backgroundColor: lab.color.soft }]}>
-              <SymbolView name={lab.icon} tintColor={lab.color.tint} size={30} />
-            </View>
-            <View style={styles.headerText}>
-              <Text style={styles.title}>{lab.name}</Text>
-              <Text style={styles.subtitle}>
-                {forms.length} {forms.length === 1 ? "form" : "forms"}
-              </Text>
+          <View style={styles.headerBlock}>
+            <View style={[styles.header, { backgroundColor: lab.color.soft }]}>
+              <BackButton />
+              <View style={styles.iconCircle}>
+                <SymbolView name={lab.icon} tintColor={lab.color.tint} size={26} />
+              </View>
+              <View style={styles.headerText}>
+                <Text style={styles.title} numberOfLines={2}>
+                  {lab.name}
+                </Text>
+                {subSbus && (
+                  <Text style={[styles.subtitle, { color: lab.color.tint }]}>
+                    {subSbus.length} {subSbus.length === 1 ? "item" : "items"}
+                  </Text>
+                )}
+              </View>
             </View>
           </View>
         }
-        ListEmptyComponent={<Text style={styles.emptyText}>No forms available.</Text>}
+        ListEmptyComponent={
+          subSbus ? (
+            <EmptyState
+              title={emptyTitle}
+              message={emptyMessage}
+              icon={EMPTY_ICON}
+              tint={lab.color.tint}
+              soft={lab.color.soft}
+            />
+          ) : (
+            <ActivityIndicator color={lab.color.tint} />
+          )
+        }
         renderItem={({ item }) => (
           <Pressable
             onPress={() =>
               router.push({
                 pathname: "/form/[formid]",
-                params: { formid: item.formId, lab: lab.id },
+                params: { formid: item.Id, lab: lab.id, name: item.Name },
               })
             }
             accessibilityRole="button"
-            accessibilityLabel={item.topic}
+            accessibilityLabel={item.Name}
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           >
             <View style={[styles.cardIcon, { backgroundColor: lab.color.soft }]}>
@@ -63,7 +180,7 @@ export default function LabScreen() {
               />
             </View>
             <Text style={styles.topic} numberOfLines={2}>
-              {item.topic}
+              {item.Name}
             </Text>
             <SymbolView
               name={{ ios: "chevron.right", android: "chevron_right", web: "chevron_right" }}
@@ -72,6 +189,15 @@ export default function LabScreen() {
             />
           </Pressable>
         )}
+      />
+      <AlertDialog
+        visible={alert.visible}
+        title={emptyTitle}
+        message={emptyMessage}
+        icon={EMPTY_ICON}
+        tint={lab.color.tint}
+        soft={lab.color.soft}
+        onClose={alert.dismiss}
       />
     </>
   );
@@ -89,29 +215,47 @@ const styles = StyleSheet.create({
     maxWidth: 640,
     alignSelf: "center",
   },
+  notFound: {
+    paddingHorizontal: 20,
+  },
   center: {
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: colors.background,
   },
-  emptyText: {
-    color: colors.textSecondary,
-    fontSize: 15,
-    textAlign: "center",
+  notFoundCard: {
+    alignSelf: "stretch",
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  iconCircle: {
-    width: 60,
-    height: 60,
+  backButton: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 14,
+    backgroundColor: colors.surface,
+    boxShadow: `0 4px 12px ${colors.shadowNeutral}`,
+  },
+  backButtonPressed: {
+    opacity: 0.7,
+  },
+  headerBlock: {
+    marginBottom: 8,
+  },
+  // Back button, lab icon and title share one row.
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 24,
+    padding: 16,
+  },
+  iconCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
   },
   headerText: {
     flex: 1,

@@ -1,31 +1,30 @@
 import type { SymbolViewProps } from "expo-symbols";
 
 import { categoryColors } from "@/constants/colors";
+import type { SBUTypes } from "@/types/DataTypes";
 
 export type Lab = {
-  /** Used in the URL: /lab/<id> */
+  /** The SBU's Id, used in the URL: /lab/<id> */
   id: string;
   name: string;
   icon: SymbolViewProps["name"];
   color: (typeof categoryColors)[keyof typeof categoryColors];
 };
 
-export const LABS: Lab[] = [
-  {
-    id: "central",
-    name: "CENTRAL LAB",
+type LabStyle = Pick<Lab, "icon" | "color">;
+
+// Icons and colors for the labs we know by name. Any other SBU falls back to
+// the default icon and a color picked by its position in the list.
+const KNOWN_LAB_STYLES: Record<string, LabStyle> = {
+  "CENTRAL LAB": {
     icon: { ios: "flask.fill", android: "science", web: "science" },
     color: categoryColors.blue,
   },
-  {
-    id: "dip",
-    name: "DIP LAB",
+  "DIP LAB": {
     icon: { ios: "spigot.fill", android: "plumbing", web: "plumbing" },
     color: categoryColors.violet,
   },
-  {
-    id: "sms",
-    name: "SMS LAB",
+  "SMS LAB": {
     icon: {
       ios: "flame.fill",
       android: "local_fire_department",
@@ -33,24 +32,35 @@ export const LABS: Lab[] = [
     },
     color: categoryColors.orange,
   },
-  {
-    id: "wrm",
-    name: "WRM LAB",
+  "WRM LAB": {
     icon: { ios: "cable.connector", android: "cable", web: "cable" },
     color: categoryColors.emerald,
   },
-  {
-    id: "brm",
-    name: "BRM LAB",
+  "BRM LAB": {
     icon: { ios: "square.stack.3d.up.fill", android: "layers", web: "layers" },
     color: categoryColors.amber,
   },
-  {
-    id: "wip",
-    name: "WIP LAB",
+  "WIP LAB": {
     icon: { ios: "gearshape.2.fill", android: "settings", web: "settings" },
     color: categoryColors.teal,
   },
-];
+};
 
-export const findLab = (id: string | undefined) => LABS.find((lab) => lab.id === id);
+const DEFAULT_ICON: SymbolViewProps["name"] = {
+  ios: "flask.fill",
+  android: "science",
+  web: "science",
+};
+
+const FALLBACK_COLORS = Object.values(categoryColors);
+
+/** Builds a lab tile from an SBU; `index` is its position in the SBU list. */
+export const toLab = (sbu: SBUTypes, index: number): Lab => {
+  const known = KNOWN_LAB_STYLES[sbu.Name.trim().toUpperCase()];
+  return {
+    id: sbu.Id,
+    name: sbu.Name,
+    icon: known?.icon ?? DEFAULT_ICON,
+    color: known?.color ?? FALLBACK_COLORS[index % FALLBACK_COLORS.length],
+  };
+};

@@ -1,13 +1,52 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
+import type { SymbolViewProps } from "expo-symbols";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+import AlertDialog from "@/components/AlertDialog";
+import EmptyState from "@/components/EmptyState";
 import LabGrid from "@/components/LabGrid";
 import { colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useHierarchy, type HierarchyMissing } from "@/context/HierarchyContext";
+import { useNotFoundAlert } from "@/hooks/useNotFoundAlert";
+import type { LocationTypes, PlantTypes } from "@/types/DataTypes";
+
+type Fallback = { title: string; message: string; icon: SymbolViewProps["name"] };
+
+// What to tell the user for each level of the hierarchy that came back empty.
+const getFallback = (
+  missing: HierarchyMissing,
+  location: LocationTypes | null,
+  plant: PlantTypes | null
+): Fallback => {
+  switch (missing) {
+    case "location":
+      return {
+        title: "Location not found",
+        message: "No location is set up for your company yet. Please contact your administrator.",
+        icon: { ios: "mappin.slash", android: "location_off", web: "location_off" },
+      };
+    case "plant":
+      return {
+        title: "Plant not found",
+        message: `No plants are set up for ${location?.Name || "your location"} yet.`,
+        icon: { ios: "building.2", android: "factory", web: "factory" },
+      };
+    case "lab":
+      return {
+        title: "Labs not found",
+        message: `No labs are set up for ${plant?.Name || "your plant"} yet.`,
+        icon: { ios: "flask", android: "science", web: "science" },
+      };
+  }
+};
 
 export default function HomeScreen() {
   const { user } = useAuth();
+  const { location, selectedPlant, loading, missing } = useHierarchy();
+  const fallback = missing ? getFallback(missing, location, selectedPlant) : null;
+  const alert = useNotFoundAlert(missing ? `${missing}:${user?.companyId}` : null);
 
   // The route guard keeps this screen unreachable while logged out.
   if (!user) return null;
@@ -19,6 +58,7 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.root} edges={["bottom", "left", "right"]}>
       <StatusBar style="dark" />
       <ScrollView contentContainerStyle={styles.scroll}>
+        {/* hero card */}
         <View style={styles.hero}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials}</Text>
@@ -28,6 +68,11 @@ export default function HomeScreen() {
             <Text style={styles.userName} numberOfLines={1}>
               {user.userName}
             </Text>
+            {location?.Name ? (
+              <Text style={styles.location} numberOfLines={1}>
+                {location.Name}
+              </Text>
+            ) : null}
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>{user.role}</Text>
             </View>
@@ -35,8 +80,24 @@ export default function HomeScreen() {
         </View>
 
         <Text style={styles.sectionTitle}>Labs</Text>
-        <LabGrid />
+        {loading ? (
+          <ActivityIndicator color={colors.primary} style={styles.loader} />
+        ) : fallback ? (
+          <EmptyState title={fallback.title} message={fallback.message} icon={fallback.icon} />
+        ) : (
+          <LabGrid />
+        )}
       </ScrollView>
+
+      {fallback && (
+        <AlertDialog
+          visible={alert.visible}
+          title={fallback.title}
+          message={fallback.message}
+          icon={fallback.icon}
+          onClose={alert.dismiss}
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -88,6 +149,11 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginTop: 2,
   },
+  location: {
+    color: colors.textOnPrimaryMuted,
+    fontSize: 14,
+    marginTop: 2,
+  },
   roleBadge: {
     alignSelf: "flex-start",
     backgroundColor: colors.onPrimaryOverlay,
@@ -101,6 +167,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.5,
+  },
+  loader: {
+    marginTop: 24,
   },
   sectionTitle: {
     color: colors.textPrimary,

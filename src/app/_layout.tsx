@@ -4,6 +4,7 @@ import * as SplashScreen from "expo-splash-screen";
 
 import { colors } from "@/constants/colors";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
+import { HierarchyProvider } from "@/context/HierarchyContext";
 
 // Keep the splash screen up until the saved session has been checked, so the
 // login screen doesn't flash for users who are already logged in.
@@ -37,10 +38,8 @@ function RootNavigator() {
       </Stack.Protected>
       <Stack.Protected guard={isLoggedIn}>
         <Stack.Screen name="(drawer)" />
-        <Stack.Screen
-          name="lab/[id]"
-          options={{ ...detailHeaderOptions, headerBackTitle: "Home" }}
-        />
+        {/* The lab screen draws its own header with a back button. */}
+        <Stack.Screen name="lab/[id]" />
         <Stack.Screen
           name="form/[formid]"
           options={{ ...detailHeaderOptions, headerBackTitle: "Back" }}
@@ -53,7 +52,9 @@ function RootNavigator() {
 export default function RootLayout() {
   return (
     <AuthProvider>
-      <RootNavigator />
+      <HierarchyProvider>
+        <RootNavigator />
+      </HierarchyProvider>
     </AuthProvider>
   );
 }

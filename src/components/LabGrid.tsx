@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { SymbolView } from "expo-symbols";
 
 import { colors } from "@/constants/colors";
-import { LABS } from "@/constants/labs";
+import { useLabs } from "@/hooks/useLabs";
 
 const GAP = 14;
 
@@ -12,13 +12,15 @@ export default function LabGrid() {
   const [width, setWidth] = useState(0);
   const columns = width >= 520 ? 3 : 2;
   const tileWidth = width ? (width - GAP * (columns - 1)) / columns : 0;
+  // One tile per SBU of the selected plant; the tile passes the SBU Id on.
+  const labs = useLabs();
 
   const handleLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   return (
     <View style={styles.grid} onLayout={handleLayout}>
       {tileWidth > 0 &&
-        LABS.map((lab) => (
+        labs.map((lab) => (
           <Pressable
             key={lab.id}
             onPress={() => router.push({ pathname: "/lab/[id]", params: { id: lab.id } })}

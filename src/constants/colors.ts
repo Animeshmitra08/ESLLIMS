@@ -86,6 +86,9 @@ export const colors = {
   error: palette.red600,
   errorBackground: palette.red50,
 
+  // Dims the screen behind dialogs and sheets.
+  backdrop: "rgba(15, 23, 42, 0.45)",
+
   // Shadows
   shadowPrimary: "rgba(37, 99, 235, 0.30)",
   shadowNeutral: "rgba(15, 23, 42, 0.08)",
