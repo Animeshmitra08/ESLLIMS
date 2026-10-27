@@ -47,7 +47,7 @@ export async function login(userName: string, password: string): Promise<AuthSes
   } catch (error) {
     throw new Error(toLoginErrorMessage(error));
   }
-
+  
   const data = response?.userData;
   if (!data?.token) throw new Error(toLoginErrorMessage(response));
 

@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = async (userName: string, password: string) => {
     const session = await login(userName, password);
+    // console.log(session);
     setAuthToken(session.token);
     try {
       await saveSession(session);

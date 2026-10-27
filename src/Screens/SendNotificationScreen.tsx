@@ -22,13 +22,10 @@ import {
 import { getForms } from "@/services/forms";
 import { NOTIFICATION_CHANNEL_ID } from "@/services/notificationHandlers";
 
-/** One device that can receive notifications. */
-type Recipient = {
-  token: string;
-  userName: string;
-  role: string | null;
-  deviceId: string;
-  lastLogin: string | null;
+/** Every device registered under one role, shown as a single row. */
+type RoleGroup = {
+  role: string;
+  tokens: string[];
 };
 
 type Status = { type: "success" | "error"; message: string } | null;
@@ -36,47 +33,49 @@ type Status = { type: "success" | "error"; message: string } | null;
 const TITLE_MAX = 100;
 const BODY_MAX = 500;
 
+// Devices registered before roles were saved are grouped under this name.
+const NO_ROLE = "No role";
+
 /**
  * `userlog` is a JSON string ({"USER_NAME":"…","ROLE_NAME":"…"}) for devices
- * registered by this app, or a plain user ID for older registrations.
+ * registered by this app, or a plain user ID (no role) for older registrations.
  */
-const parseUserlog = (userlog: string) => {
+const parseRole = (userlog: string): string | null => {
   try {
     const parsed = JSON.parse(userlog);
-    if (parsed && typeof parsed === "object") {
-      return {
-        userName: typeof parsed.USER_NAME === "string" ? parsed.USER_NAME : null,
-        role: typeof parsed.ROLE_NAME === "string" ? parsed.ROLE_NAME : null,
-      };
+    if (typeof parsed?.ROLE_NAME === "string" && parsed.ROLE_NAME.trim()) {
+      return parsed.ROLE_NAME.trim();
     }
   } catch {
     // Not JSON: a plain user ID.
   }
-  return { userName: userlog?.trim() || null, role: null };
+  return null;
 };
 
-/** One entry per FCM token; the backend can hold the same token more than once. */
-const toRecipients = (records: FirebaseTokenTypes[]): Recipient[] => {
-  const byToken = new Map<string, Recipient>();
+/**
+ * Groups FCM tokens by role, sorted by name with "No role" last. Each token
+ * counts once; the backend can hold the same token more than once.
+ */
+const toRoleGroups = (records: FirebaseTokenTypes[]): RoleGroup[] => {
+  const seen = new Set<string>();
+  const byRole = new Map<string, string[]>();
   for (const record of records) {
-    if (!record.firebaseToken || byToken.has(record.firebaseToken)) continue;
-    const { userName, role } = parseUserlog(record.userlog);
-    byToken.set(record.firebaseToken, {
-      token: record.firebaseToken,
-      userName: userName ?? record.loggedBy ?? "Unknown user",
-      role,
-      deviceId: record.deviceId,
-      lastLogin: record.lastLogin ?? record.loggedOn ?? null,
-    });
+    const token = record.firebaseToken;
+    if (!token || seen.has(token)) continue;
+    seen.add(token);
+    const role = parseRole(record.userlog) ?? NO_ROLE;
+    const tokens = byRole.get(role);
+    if (tokens) tokens.push(token);
+    else byRole.set(role, [token]);
   }
-  return [...byToken.values()];
+  return [...byRole]
+    .map(([role, tokens]) => ({ role, tokens }))
+    .sort((a, b) =>
+      a.role === NO_ROLE ? 1 : b.role === NO_ROLE ? -1 : a.role.localeCompare(b.role)
+    );
 };
 
-const formatDate = (iso: string | null) => {
-  if (!iso) return null;
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
-};
+const recipientCount = (count: number) => `${count} ${count === 1 ? "recipient" : "recipients"}`;
 
 const toMessage = (error: unknown, fallback: string) => {
   if (typeof error === "string" && error.trim()) return error;
@@ -88,11 +87,12 @@ const toMessage = (error: unknown, fallback: string) => {
 };
 
 export default function SendNotificationScreen() {
-  const [recipients, setRecipients] = useState<Recipient[]>([]);
+  const [groups, setGroups] = useState<RoleGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
 
+  // Selected role names.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
   const [title, setTitle] = useState("");
@@ -108,10 +108,10 @@ export default function SendNotificationScreen() {
   const loadRecipients = useCallback(async () => {
     try {
       const records = await getFirebaseToken();
-      const next = toRecipients(Array.isArray(records) ? records : []);
-      setRecipients(next);
-      // Keep only selections that still exist.
-      setSelected((prev) => new Set(next.filter((r) => prev.has(r.token)).map((r) => r.token)));
+      const next = toRoleGroups(Array.isArray(records) ? records : []);
+      setGroups(next);
+      // Keep only selected roles that still have devices.
+      setSelected((prev) => new Set(next.filter((g) => prev.has(g.role)).map((g) => g.role)));
       setLoadError(null);
     } catch (error) {
       setLoadError(toMessage(error, "Couldn't load devices. Check your connection and try again."));
@@ -128,23 +128,28 @@ export default function SendNotificationScreen() {
     setRefreshing(false);
   };
 
-  const visibleRecipients = useMemo(() => {
+  const totalRecipients = groups.reduce((sum, g) => sum + g.tokens.length, 0);
+
+  const selectedTokens = useMemo(
+    () => groups.filter((g) => selected.has(g.role)).flatMap((g) => g.tokens),
+    [groups, selected]
+  );
+
+  const visibleGroups = useMemo(() => {
     const query = search.trim().toLowerCase();
-    if (!query) return recipients;
-    return recipients.filter((r) =>
-      [r.userName, r.role ?? "", r.deviceId].some((field) => field.toLowerCase().includes(query))
-    );
-  }, [recipients, search]);
+    if (!query) return groups;
+    return groups.filter((g) => g.role.toLowerCase().includes(query));
+  }, [groups, search]);
 
   const allVisibleSelected =
-    visibleRecipients.length > 0 && visibleRecipients.every((r) => selected.has(r.token));
+    visibleGroups.length > 0 && visibleGroups.every((g) => selected.has(g.role));
 
-  const toggleRecipient = (token: string) => {
+  const toggleRole = (role: string) => {
     setStatus(null);
     setSelected((prev) => {
       const next = new Set(prev);
-      if (next.has(token)) next.delete(token);
-      else next.add(token);
+      if (next.has(role)) next.delete(role);
+      else next.add(role);
       return next;
     });
   };
@@ -153,20 +158,20 @@ export default function SendNotificationScreen() {
     setStatus(null);
     setSelected((prev) => {
       const next = new Set(prev);
-      visibleRecipients.forEach((r) => (allVisibleSelected ? next.delete(r.token) : next.add(r.token)));
+      visibleGroups.forEach((g) => (allVisibleSelected ? next.delete(g.role) : next.add(g.role)));
       return next;
     });
   };
 
-  const canSend = !sending && selected.size > 0 && !!title.trim() && !!body.trim();
+  const canSend = !sending && selectedTokens.length > 0 && !!title.trim() && !!body.trim();
 
   const send = async () => {
     if (!title.trim() || !body.trim()) {
       setStatus({ type: "error", message: "Enter a title and a message." });
       return;
     }
-    if (selected.size === 0) {
-      setStatus({ type: "error", message: "Select at least one device." });
+    if (selectedTokens.length === 0) {
+      setStatus({ type: "error", message: "Select at least one role." });
       return;
     }
 
@@ -175,17 +180,16 @@ export default function SendNotificationScreen() {
     const form = forms.find((f) => f.formId === formId);
     try {
       await postNotification({
-        token: [...selected],
+        token: selectedTokens,
         title: title.trim(),
         body: body.trim(),
         channelId: NOTIFICATION_CHANNEL_ID,
         // Tapping the notification opens this form (see useNotifications).
         ...(form && { data: { formid: form.formId } }),
       });
-      const count = selected.size;
       setStatus({
         type: "success",
-        message: `Notification sent to ${count} ${count === 1 ? "device" : "devices"}.`,
+        message: `Notification sent to ${recipientCount(selectedTokens.length)}.`,
       });
       setTitle("");
       setBody("");
@@ -278,21 +282,21 @@ export default function SendNotificationScreen() {
           <View style={styles.card}>
             <View style={styles.sectionHeader}>
               <Text style={styles.cardTitle}>
-                Recipients{recipients.length ? ` (${selected.size}/${recipients.length})` : ""}
+                Recipients{totalRecipients ? ` (${selectedTokens.length}/${totalRecipients})` : ""}
               </Text>
-              {visibleRecipients.length > 0 && (
+              {visibleGroups.length > 0 && (
                 <Pressable onPress={toggleAllVisible} hitSlop={8} accessibilityRole="button">
                   <Text style={styles.link}>{allVisibleSelected ? "Deselect all" : "Select all"}</Text>
                 </Pressable>
               )}
             </View>
 
-            {recipients.length > 0 && (
+            {groups.length > 0 && (
               <TextInput
                 style={[styles.input, styles.search, focused === "search" && styles.inputFocused]}
                 value={search}
                 onChangeText={setSearch}
-                placeholder="Search by user, role or device"
+                placeholder="Search by role"
                 placeholderTextColor={colors.textPlaceholder}
                 selectionColor={colors.primary}
                 autoCapitalize="none"
@@ -311,18 +315,17 @@ export default function SendNotificationScreen() {
                   <Text style={styles.link}>Retry</Text>
                 </Pressable>
               </View>
-            ) : visibleRecipients.length === 0 ? (
+            ) : visibleGroups.length === 0 ? (
               <Text style={styles.emptyText}>
-                {recipients.length ? "No devices match your search." : "No registered devices yet."}
+                {groups.length ? "No roles match your search." : "No registered devices yet."}
               </Text>
             ) : (
-              visibleRecipients.map((r, index) => {
-                const checked = selected.has(r.token);
-                const lastLogin = formatDate(r.lastLogin);
+              visibleGroups.map((g, index) => {
+                const checked = selected.has(g.role);
                 return (
                   <Pressable
-                    key={r.token}
-                    onPress={() => toggleRecipient(r.token)}
+                    key={g.role}
+                    onPress={() => toggleRole(g.role)}
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked }}
                     style={({ pressed }) => [
@@ -340,21 +343,11 @@ export default function SendNotificationScreen() {
                         />
                       )}
                     </View>
-                    <View style={styles.recipientText}>
-                      <View style={styles.recipientTop}>
-                        <Text style={styles.recipientName} numberOfLines={1}>
-                          {r.userName}
-                        </Text>
-                        {r.role && (
-                          <View style={styles.roleTag}>
-                            <Text style={styles.roleTagText}>{r.role}</Text>
-                          </View>
-                        )}
-                      </View>
-                      <Text style={styles.recipientMeta} numberOfLines={1}>
-                        Device {r.deviceId}
-                        {lastLogin ? ` · ${lastLogin}` : ""}
-                      </Text>
+                    <Text style={styles.roleName} numberOfLines={1}>
+                      {g.role}
+                    </Text>
+                    <View style={styles.countTag}>
+                      <Text style={styles.countTagText}>{recipientCount(g.tokens.length)}</Text>
                     </View>
                   </Pressable>
                 );
@@ -393,7 +386,7 @@ export default function SendNotificationScreen() {
                   size={18}
                 />
                 <Text style={styles.buttonText}>
-                  Send{selected.size ? ` to ${selected.size}` : ""}
+                  Send{selectedTokens.length ? ` to ${selectedTokens.length}` : ""}
                 </Text>
               </>
             )}
@@ -543,35 +536,23 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primary,
   },
-  recipientText: {
+  roleName: {
     flex: 1,
-  },
-  recipientTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  recipientName: {
-    flexShrink: 1,
     color: colors.textPrimary,
     fontSize: 15,
     fontWeight: "600",
+    marginRight: 8,
   },
-  roleTag: {
+  countTag: {
     backgroundColor: colors.accentSoft,
     borderRadius: 999,
     paddingVertical: 2,
     paddingHorizontal: 8,
   },
-  roleTagText: {
+  countTagText: {
     color: colors.accent,
     fontSize: 11,
     fontWeight: "700",
-  },
-  recipientMeta: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    marginTop: 2,
   },
   footer: {
     padding: 16,

@@ -83,6 +83,9 @@ export default function LoginScreen() {
     }
   };
 
+  console.log("login err:", error);
+  
+
   return (
     <View style={styles.root}>
       <StatusBar style="dark" />

@@ -147,6 +147,9 @@ export const LoginApi = async (userName: string, password: string) => {
     password,
     rememberPassword: false,
   };
+
+  console.log(body);
+  
   try {
     const res = await applicationApi.post<LoginResponse>(LOGIN_PATH, body, {
       headers: { appid: APP_ID },
