@@ -13,8 +13,8 @@ import { useAuth } from "@/context/AuthContext";
 import { fetchLims } from "@/services/ApiServices";
 import {
   checkForNewSamples,
-  resetSampleWatcher,
   SAMPLE_POLL_INTERVAL_MS,
+  saveLabNames,
 } from "@/services/sampleNotificationService";
 import type { LocationTypes, PlantTypes, SBUTypes, TrnSampleTypes } from "@/types/DataTypes";
 import { toTrnSampleList } from "@/utils/samples";
@@ -134,9 +134,13 @@ export function HierarchyProvider({ children }: { children: ReactNode }) {
 
   // Lab names for new-sample notifications, read by the polling loop below
   // without restarting it whenever the SBUs change.
+  // Also saved to storage for the background task's notifications.
   const sbusRef = useRef<SBUTypes[]>([]);
   useEffect(() => {
     sbusRef.current = sbus ?? [];
+    if (sbus?.length) {
+      saveLabNames(sbus).catch((e) => console.warn("Failed to save lab names", e));
+    }
   }, [sbus]);
 
   // Every sample (TrnSampledata takes an empty body). Waits for login so the
@@ -147,7 +151,6 @@ export function HierarchyProvider({ children }: { children: ReactNode }) {
     if (!companyId) return;
     let active = true;
     let inFlight = false;
-    resetSampleWatcher();
 
     const load = async () => {
       if (inFlight) return;
@@ -157,9 +160,9 @@ export function HierarchyProvider({ children }: { children: ReactNode }) {
         if (!active) return;
         const samples = toTrnSampleList(res, "TrnSampledata");
         setAllSamples(samples);
-        checkForNewSamples(samples, (labId) =>
+        checkForNewSamples(companyId, samples, (labId) =>
           sbusRef.current.find((sbu) => sbu.Id === labId)?.Name
-        );
+        ).catch((e) => console.warn("New-sample check failed", e));
       } catch (e) {
         console.warn("TrnSampledata failed", e);
         // Keep the last good list if a refresh fails.
@@ -183,7 +186,6 @@ export function HierarchyProvider({ children }: { children: ReactNode }) {
       if (loadSamplesRef.current === load) loadSamplesRef.current = null;
       clearInterval(interval);
       subscription.remove();
-      resetSampleWatcher();
       setAllSamples(null);
     };
   }, [companyId]);

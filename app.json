@@ -15,7 +15,9 @@
         "aps-environment": "production"
       },
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": [
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -27,6 +29,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.aondigicon.esllims",
+      "permissions": [
+        "android.permission.POST_NOTIFICATIONS"
+      ],
       "googleServicesFile": "./google-services.json"
     },
     "web": {
@@ -53,7 +58,8 @@
             "useFrameworks": "dynamic"
           }
         }
-      ]
+      ],
+      "expo-background-task"
     ],
     "experiments": {
       "typedRoutes": true,

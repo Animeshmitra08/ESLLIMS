@@ -70,7 +70,14 @@ export const initializeNotifications = async () => {
   }
   if (initialized) return;
 
-  if (Platform.OS === "web" || !Device.isDevice) {
+  if (Platform.OS === "web") return;
+
+  if (!Device.isDevice) {
+    // Local notifications (e.g. new samples) still work on emulators, but
+    // only with permission and the channel set up.
+    initialized = true;
+    await notifee.requestPermission();
+    await ensureNotificationChannel();
     console.log("Push notifications need a physical Android or iOS device");
     return;
   }

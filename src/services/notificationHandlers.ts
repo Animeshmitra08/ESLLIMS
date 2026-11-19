@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import notifee, {
   AndroidImportance,
   AndroidStyle,
@@ -17,28 +18,58 @@ import { ensureSettingsLoaded, type AppSettings } from "@/services/settingsStore
  * handlers (backgroundNotifications), which run before React has loaded.
  */
 
-/** Android channel for app notifications. Send this as `channelId` from the backend. */
-export const NOTIFICATION_CHANNEL_ID = "esllims_default";
+/**
+ * Android channel for push notifications. Send this as `channelId` from the
+ * backend; it's also FCM's default channel (firebase.json), so pushes without
+ * a channelId use it too. High importance, so they pop up with sound.
+ */
+export const NOTIFICATION_CHANNEL_ID = "esllims_alerts";
+
+/**
+ * Channels from earlier versions. Android never lets an app change a
+ * channel's sound or importance once created, and these were created without
+ * an explicit sound, so they're deleted and replaced.
+ */
+const OLD_CHANNEL_IDS = [
+  "esllims_default",
+  "esllims_sound_vibrate",
+  "esllims_sound_novibrate",
+  "esllims_silent_vibrate",
+  "esllims_silent_novibrate",
+];
 
 /** Key in a Notifee notification's data that links it to the saved notification. */
 const STORED_ID_KEY = "notificationId";
 
-export const ensureNotificationChannel = () =>
-  notifee.createChannel({
+let oldChannelsDeleted = false;
+const deleteOldChannels = async () => {
+  if (oldChannelsDeleted || Platform.OS !== "android") return;
+  oldChannelsDeleted = true;
+  await Promise.all(OLD_CHANNEL_IDS.map((id) => notifee.deleteChannel(id).catch(() => {})));
+};
+
+export const ensureNotificationChannel = async () => {
+  await deleteOldChannels();
+  await notifee.createChannel({
     id: NOTIFICATION_CHANNEL_ID,
     name: "ESL LIMS Notifications",
     importance: AndroidImportance.HIGH,
+    sound: "default",
+    vibration: true,
   });
+};
 
 /**
  * Android fixes a channel's sound and vibration once it's created, so each
  * combination of the Sound and Vibrate settings gets its own channel.
+ * All are high importance, which is what makes Android show the banner.
  */
 const ensureSettingsChannel = async ({ sound, vibrate }: AppSettings) => {
-  const id = `esllims_${sound ? "sound" : "silent"}_${vibrate ? "vibrate" : "novibrate"}`;
+  await deleteOldChannels();
+  const id = `esllims_v2_${sound ? "sound" : "silent"}_${vibrate ? "vibrate" : "novibrate"}`;
   await notifee.createChannel({
     id,
-    name: `ESL LIMS (${sound ? "sound" : "silent"}, ${vibrate ? "vibrate" : "no vibration"})`,
+    name: `ESL LIMS alerts (${sound ? "sound" : "silent"}, ${vibrate ? "vibrate" : "no vibration"})`,
     importance: AndroidImportance.HIGH,
     ...(sound ? { sound: "default" } : {}),
     vibration: vibrate,
@@ -80,10 +111,12 @@ export const fromRemoteMessage = (message: RemoteMessage): AppNotification => {
 /**
  * Save the message and show it with Notifee (FCM doesn't show data-only
  * messages), following the Notification, Sound and Vibrate settings. With
- * notifications off it's only saved to the list.
+ * notifications off it's only saved to the list. A notification that's
+ * already saved isn't shown again.
  */
 export const saveAndDisplay = async (notification: AppNotification) => {
-  await addNotification(notification);
+  const isNew = await addNotification(notification);
+  if (!isNew) return;
 
   // May run in the background handler before the app has loaded settings.
   const settings = await ensureSettingsLoaded();
@@ -97,6 +130,10 @@ export const saveAndDisplay = async (notification: AppNotification) => {
     data: { ...notification.data, [STORED_ID_KEY]: notification.id },
     android: {
       channelId,
+      // Heads-up banner and sound on Android 7 and older; newer versions take
+      // both from the channel.
+      importance: AndroidImportance.HIGH,
+      ...(settings.sound ? { sound: "default" } : {}),
       pressAction: { id: "default", launchActivity: "default" },
       style: { type: AndroidStyle.BIGTEXT, text: notification.body },
     },

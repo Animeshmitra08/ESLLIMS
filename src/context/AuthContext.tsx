@@ -14,6 +14,11 @@ import {
   setCurrentUserForNotifications,
 } from "@/services/NotificationService";
 import { clearNotifications } from "@/services/notificationStore";
+import {
+  registerSampleBackgroundTask,
+  unregisterSampleBackgroundTask,
+} from "@/services/sampleBackgroundTask";
+import { resetSampleWatcher } from "@/services/sampleNotificationService";
 import { clearSession, loadSession, saveSession } from "@/services/session";
 
 type AuthContextValue = {
@@ -41,6 +46,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           
           setAuthToken(session.token);
           setUser(session.user);
+          // Re-save so sessions from older versions become readable by the
+          // background sample check while the phone is locked.
+          saveSession(session).catch((e) => console.warn("Failed to re-save session", e));
         } else {
           await clearSession();
         }
@@ -68,6 +76,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     initializeNotifications().catch((e) =>
       console.warn("Failed to initialize notifications", e)
     );
+    registerSampleBackgroundTask().catch((e) =>
+      console.warn("Failed to register the background sample check", e)
+    );
   }, [user]);
 
   const signIn = async (userName: string, password: string) => {
@@ -89,6 +100,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await clearSession();
     } catch (e) {
       console.warn("Failed to clear session", e);
+    }
+    try {
+      await unregisterSampleBackgroundTask();
+      await resetSampleWatcher();
+    } catch (e) {
+      console.warn("Failed to stop the background sample check", e);
     }
     try {
       await resetNotificationService();
