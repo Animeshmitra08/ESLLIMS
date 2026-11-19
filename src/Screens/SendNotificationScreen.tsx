@@ -257,7 +257,7 @@ export default function SendNotificationScreen() {
               onBlur={() => setFocused(null)}
             />
 
-            <Text style={styles.label}>Open form on tap (optional)</Text>
+            {/* <Text style={styles.label}>Open form on tap (optional)</Text>
             <View style={styles.chips}>
               {forms.map((form) => {
                 const active = form.formId === formId;
@@ -275,7 +275,7 @@ export default function SendNotificationScreen() {
                   </Pressable>
                 );
               })}
-            </View>
+            </View> */}
           </View>
 
           {/* ── Recipients ── */}

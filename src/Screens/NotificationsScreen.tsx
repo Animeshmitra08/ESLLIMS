@@ -9,12 +9,11 @@ import {
   Text,
   View,
 } from "react-native";
-import { router } from "expo-router";
 import { SymbolView } from "expo-symbols";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { colors } from "@/constants/colors";
-import { getNotificationFormId, useNotifications } from "@/hooks/useNotifications";
+import { openNotificationData, useNotifications } from "@/hooks/useNotifications";
 import {
   clearNotifications,
   deleteNotification,
@@ -66,13 +65,7 @@ export default function NotificationsScreen() {
 
   const open = (item: AppNotification) => {
     setNotificationRead(item.id, true).catch(logError);
-    const formid = getNotificationFormId(item.data);
-    if (formid) {
-      router.push({
-        pathname: "/form/[formid]",
-        params: item.data.lab ? { formid, lab: item.data.lab } : { formid },
-      });
-    }
+    openNotificationData(item.data);
   };
 
   const showItemMenu = (item: AppNotification) => {

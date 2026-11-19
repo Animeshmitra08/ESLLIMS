@@ -10,6 +10,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SymbolView } from "expo-symbols";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -33,17 +34,32 @@ const DEFAULT_COLOR = { tint: colors.primary, soft: colors.primarySoft };
  * Every registered sample from TrnSampledata (loaded and kept fresh by
  * HierarchyProvider), with search, a lab filter and sorting by registration
  * time.
+ *
+ * Opened with a `sampleId` param (from a tapped sample notification), it
+ * shows that sample's details once the list has it.
  */
 export default function SamplesScreen() {
   const { allSamples, samplesLoading, refreshSamples } = useHierarchy();
   const labs = useLabs();
+  const { sampleId } = useLocalSearchParams<{ sampleId?: string }>();
 
   const [query, setQuery] = useState("");
   // null shows every lab.
   const [labId, setLabId] = useState<string | null>(null);
   const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
-  const [selected, setSelected] = useState<TrnSampleTypes | null>(null);
+  // A sample picked from the list wins over one from the route.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  const openId = selectedId ?? sampleId ?? null;
+  const selected = openId ? (allSamples.find((s) => s.Id === openId) ?? null) : null;
+
+  const closeDetails = () => {
+    setSelectedId(null);
+    // Clear the route's sample so the dialog doesn't reopen, and so tapping
+    // the same notification again opens it again.
+    if (sampleId) router.setParams({ sampleId: undefined });
+  };
 
   // TrnSampledata only sends the lab's Id; names and colors come from the
   // selected plant's labs. Labs outside that plant show as "Other lab".
@@ -101,7 +117,7 @@ export default function SamplesScreen() {
 
   const filtered = query.trim() !== "" || labId !== null;
 
-  // console.log(JSON.stringify(visibleSamples));
+  console.log(JSON.stringify(visibleSamples));
   
 
   return (
@@ -216,7 +232,7 @@ export default function SamplesScreen() {
           const date = trnSampleDate(item);
           return (
             <Pressable
-              onPress={() => setSelected(item)}
+              onPress={() => setSelectedId(item.Id)}
               accessibilityRole="button"
               accessibilityLabel={`${item.SampleCode || "Sample"}, ${stage}`}
               style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
@@ -253,7 +269,7 @@ export default function SamplesScreen() {
         sample={selected}
         labName={labNameFor(selected)}
         tint={tintFor(selected).tint}
-        onClose={() => setSelected(null)}
+        onClose={closeDetails}
       />
     </SafeAreaView>
   );

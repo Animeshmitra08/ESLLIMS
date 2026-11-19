@@ -219,16 +219,17 @@ export const toTrnSampleList = (res: unknown, method = "TrnSampledata"): TrnSamp
 export const trnSampleDate = (sample: TrnSampleTypes) =>
   sample.RegisteredOn || sample.DateTime || sample.SampleCollectionDate || sample.Doc_Date;
 
-export type TrnSampleStage = "Registered" | "Received" | "Assigned" | "Analysed" | "Published";
+export type TrnSampleStage = "Registered" | "Received" | "Analysed" | "Published";
 
 /**
- * How far the sample has got, from the furthest step that has a time.
+ * How far the sample has got, from the furthest step that has a time. Only
+ * these four steps count (the same ones sample notifications announce);
+ * assignment isn't shown as a stage.
  * (Status is a numeric code whose meanings aren't known to the app yet.)
  */
 export const trnSampleStage = (sample: TrnSampleTypes): TrnSampleStage => {
   if (sample.PublishedOn) return "Published";
   if (sample.AnalystOn) return "Analysed";
-  if (sample.AssignedOn || sample.AssignedOn2) return "Assigned";
   if (sample.ReceivedOn) return "Received";
   return "Registered";
 };

@@ -11,6 +11,7 @@ import {
   loadNotifications,
   subscribeNotifications,
 } from "@/services/notificationStore";
+import { NEW_SAMPLE_NOTIFICATION_TYPE } from "@/services/sampleNotificationService";
 
 /** Saved notifications (newest first) and the unread count; updates live. */
 export function useNotifications() {
@@ -27,19 +28,29 @@ export function useNotifications() {
 export const getNotificationFormId = (data: Record<string, string>) =>
   data.formid ?? data.formId ?? data.FormId;
 
-const openNotificationTarget = ({ data }: OpenedNotification) => {
+/**
+ * Open what a notification points to. Returns false if it points nowhere.
+ *   - a form → that form;
+ *   - a sample (sample notifications) → the samples screen, showing it;
+ *   - several samples (the summary notification) → the samples screen.
+ */
+export const openNotificationData = (data: Record<string, string>) => {
   const formid = getNotificationFormId(data);
   if (formid) {
     router.push({
       pathname: "/form/[formid]",
       params: data.lab ? { formid, lab: data.lab } : { formid },
     });
-  } else if (data.labId) {
-    // New-sample notifications point to the sample's lab.
-    router.push({ pathname: "/lab/[id]", params: { id: data.labId } });
+  } else if (data.type === NEW_SAMPLE_NOTIFICATION_TYPE) {
+    router.push(data.sampleId ? { pathname: "/samples", params: { sampleId: data.sampleId } } : "/samples");
   } else {
-    router.push("/notifications");
+    return false;
   }
+  return true;
+};
+
+const openNotificationTarget = ({ data }: OpenedNotification) => {
+  if (!openNotificationData(data)) router.push("/notifications");
 };
 
 /**
