@@ -10,6 +10,7 @@ import {
   setNotificationRead,
   type AppNotification,
 } from "@/services/notificationStore";
+import { ensureSettingsLoaded, type AppSettings } from "@/services/settingsStore";
 
 /**
  * Logic shared by the in-app handlers (NotificationService) and the background
@@ -28,6 +29,22 @@ export const ensureNotificationChannel = () =>
     name: "ESL LIMS Notifications",
     importance: AndroidImportance.HIGH,
   });
+
+/**
+ * Android fixes a channel's sound and vibration once it's created, so each
+ * combination of the Sound and Vibrate settings gets its own channel.
+ */
+const ensureSettingsChannel = async ({ sound, vibrate }: AppSettings) => {
+  const id = `esllims_${sound ? "sound" : "silent"}_${vibrate ? "vibrate" : "novibrate"}`;
+  await notifee.createChannel({
+    id,
+    name: `ESL LIMS (${sound ? "sound" : "silent"}, ${vibrate ? "vibrate" : "no vibration"})`,
+    importance: AndroidImportance.HIGH,
+    ...(sound ? { sound: "default" } : {}),
+    vibration: vibrate,
+  });
+  return id;
+};
 
 const toStringRecord = (data: Record<string, unknown> | undefined) => {
   const result: Record<string, string> = {};
@@ -60,19 +77,37 @@ export const fromRemoteMessage = (message: RemoteMessage): AppNotification => {
   };
 };
 
-/** Save the message and show it with Notifee (FCM doesn't show data-only messages). */
+/**
+ * Save the message and show it with Notifee (FCM doesn't show data-only
+ * messages), following the Notification, Sound and Vibrate settings. With
+ * notifications off it's only saved to the list.
+ */
 export const saveAndDisplay = async (notification: AppNotification) => {
   await addNotification(notification);
-  await ensureNotificationChannel();
+
+  // May run in the background handler before the app has loaded settings.
+  const settings = await ensureSettingsLoaded();
+  if (!settings.notifications) return;
+
+  const channelId = await ensureSettingsChannel(settings);
   await notifee.displayNotification({
     id: notification.id,
     title: notification.title,
     body: notification.body,
     data: { ...notification.data, [STORED_ID_KEY]: notification.id },
     android: {
-      channelId: NOTIFICATION_CHANNEL_ID,
+      channelId,
       pressAction: { id: "default", launchActivity: "default" },
       style: { type: AndroidStyle.BIGTEXT, text: notification.body },
+    },
+    ios: {
+      ...(settings.sound ? { sound: "default" } : {}),
+      foregroundPresentationOptions: {
+        banner: true,
+        list: true,
+        badge: true,
+        sound: settings.sound,
+      },
     },
   });
 };

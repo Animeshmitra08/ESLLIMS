@@ -15,6 +15,9 @@ export default function LabGrid() {
   // One tile per SBU of the selected plant; the tile passes the SBU Id on.
   const labs = useLabs();
 
+  console.log(labs);
+  
+
   const handleLayout = (e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width);
 
   return (

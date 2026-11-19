@@ -19,6 +19,7 @@ import { useLab } from "@/hooks/useLabs";
 import { useNotFoundAlert } from "@/hooks/useNotFoundAlert";
 import { fetchLims } from "@/services/ApiServices";
 import type { SampleDataTypes } from "@/types/DataTypes";
+import { sampleTitle, toSampleList } from "@/utils/samples";
 
 type SortOrder = "newest" | "oldest";
 
@@ -28,28 +29,6 @@ const SAMPLE_ICON = { ios: "testtube.2", android: "science", web: "science" } as
 // or a number, so compare it as text.
 const compareYear = (a: unknown, b: unknown) =>
   String(a ?? "").localeCompare(String(b ?? ""), undefined, { numeric: true });
-
-/**
- * SampleAll doesn't always return a list (it can be empty, an object or a JSON
- * string), so anything that isn't a list of samples becomes an empty list.
- */
-const toSampleList = (res: unknown): SampleDataTypes[] => {
-  let value = res;
-  if (typeof value === "string") {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      value = null;
-    }
-  }
-  if (!Array.isArray(value)) {
-    if (value != null) console.warn("SampleAll returned an unexpected response", res);
-    return [];
-  }
-  return value.filter(
-    (item): item is SampleDataTypes => typeof item === "object" && item !== null
-  );
-};
 
 export default function FormScreen() {
   // `formid` is the sub-SBU Id tapped on the lab screen, `name` its Name, and
@@ -76,7 +55,7 @@ export default function FormScreen() {
     let active = true;
     fetchLims<unknown>("SampleAll", { Id: formid })
       .then((res) => {
-        if (active) setSamples(toSampleList(res));
+        if (active) setSamples(toSampleList(res, "SampleAll"));
       })
       .catch((e) => {
         console.warn("SampleAll failed", e);
@@ -105,6 +84,9 @@ export default function FormScreen() {
       );
   }, [samples, year, sortOrder]);
 
+  // console.log(JSON.stringify(samples));
+  
+
   const title = name ?? "Samples";
   const emptyTitle = "Sample not found";
   const emptyMessage = `No samples are available for ${title} yet.`;
@@ -117,7 +99,8 @@ export default function FormScreen() {
         style={styles.root}
         contentContainerStyle={styles.list}
         data={visibleSamples}
-        keyExtractor={(item) => item.Id}
+        // Id can be missing (FOR JSON drops NULL columns); fall back so keys stay unique.
+        keyExtractor={(item, index) => item.Id || `${item.SampleId}-${index}`}
         ListHeaderComponent={
           <View style={styles.headerBlock}>
             {lab && (
@@ -197,7 +180,7 @@ export default function FormScreen() {
           <Pressable
             onPress={() => setSelected(item)}
             accessibilityRole="button"
-            accessibilityLabel={item.Name}
+            accessibilityLabel={sampleTitle(item)}
             style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
           >
             <View style={[styles.cardIcon, { backgroundColor: soft }]}>
@@ -209,7 +192,7 @@ export default function FormScreen() {
             </View>
             <View style={styles.cardText}>
               <Text style={styles.cardTitle} numberOfLines={1}>
-                {item.Name}
+                {sampleTitle(item)}
               </Text>
               {item.Description ? (
                 <Text style={styles.cardDescription} numberOfLines={2}>

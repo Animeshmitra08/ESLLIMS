@@ -3,7 +3,7 @@ import { useHierarchy } from "@/context/HierarchyContext";
 
 /** The selected plant's SBUs, shown as labs. */
 export function useLabs(): Lab[] {
-  const { sbus } = useHierarchy();
+  const { sbus } = useHierarchy();  
   return sbus.map(toLab);
 }
 

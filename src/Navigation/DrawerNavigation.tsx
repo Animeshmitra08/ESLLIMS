@@ -1,7 +1,5 @@
 import {
-  Alert,
   Image,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -20,6 +18,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { colors } from "@/constants/colors";
 import { useAuth } from "@/context/AuthContext";
+import { useConfirmLogout } from "@/hooks/useConfirmLogout";
 import { useNotifications, useNotificationSync } from "@/hooks/useNotifications";
 
 type DrawerScreen = {
@@ -47,6 +46,11 @@ const DRAWER_SCREENS: DrawerScreen[] = [
     icon: { ios: "house", android: "home", web: "home" },
   },
   {
+    name: "samples",
+    title: "Samples",
+    icon: { ios: "testtube.2", android: "science", web: "science" },
+  },
+  {
     name: "notifications",
     title: "Notifications",
     icon: { ios: "bell", android: "notifications", web: "notifications" },
@@ -56,6 +60,11 @@ const DRAWER_SCREENS: DrawerScreen[] = [
     name: "send-notification",
     title: "Send Notification",
     icon: { ios: "paperplane", android: "send", web: "send" },
+  },
+  {
+    name: "settings",
+    title: "Settings",
+    icon: { ios: "gearshape", android: "settings", web: "settings" },
   },
 ];
 
@@ -145,21 +154,9 @@ function UnreadLabel({ title, color }: { title: string; color: ColorValue }) {
 }
 
 function DrawerContent(props: DrawerContentComponentProps) {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
-
-  const confirmLogout = () => {
-    const message = "Are you sure you want to logout?";
-    // Alert.alert has no web implementation.
-    if (Platform.OS === "web") {
-      if (window.confirm(message)) signOut();
-      return;
-    }
-    Alert.alert("Logout", message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Logout", style: "destructive", onPress: signOut },
-    ]);
-  };
+  const confirmLogout = useConfirmLogout();
 
   return (
     <View style={styles.root}>

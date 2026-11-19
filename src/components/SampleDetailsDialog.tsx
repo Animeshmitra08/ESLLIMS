@@ -3,9 +3,11 @@ import { SymbolView } from "expo-symbols";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import EmptyState from "@/components/EmptyState";
+import ParameterCard from "@/components/ParameterCard";
 import { colors } from "@/constants/colors";
 import type { SampleDataTypes, SampleHeaderData } from "@/types/DataTypes";
 import { formatDateTime } from "@/utils/date";
+import { parseHeaderData, sampleTitle } from "@/utils/samples";
 
 type Props = {
   /** The sample to show; the dialog is hidden while this is null. */
@@ -17,38 +19,9 @@ type Props = {
 
 const yesNo = (value: boolean) => (value ? "Yes" : "No");
 
-/** "Min – Max" when either bound is set, otherwise null. */
-const formatRange = ({ Min, Max }: SampleHeaderData) => {
-  if (Min == null && Max == null) return null;
-  return `${Min ?? "–"} – ${Max ?? "–"}`;
-};
-
 // Seq may be missing or a number, so compare it as text.
 const bySeq = (a: SampleHeaderData, b: SampleHeaderData) =>
   String(a.Seq ?? "").localeCompare(String(b.Seq ?? ""), undefined, { numeric: true });
-
-/**
- * HeaderData can arrive as an array or as a JSON string of one, depending on
- * the API, so accept both and drop anything that isn't a parameter object.
- */
-const parseHeaderData = (raw: unknown): SampleHeaderData[] => {
-  let value = raw;
-  if (typeof value === "string") {
-    try {
-      value = JSON.parse(value);
-    } catch {
-      console.warn("HeaderData is not valid JSON", raw);
-      return [];
-    }
-  }
-  if (!Array.isArray(value)) return [];
-  return value.filter(
-    (item): item is SampleHeaderData => typeof item === "object" && item !== null
-  );
-};
-
-// The API sends "--" when a parameter has no unit.
-const hasUnit = (uom: string | null | undefined) => !!uom && uom.trim() !== "--";
 
 function DetailRow({ label, value }: { label: string; value: string | number | null | undefined }) {
   if (value === null || value === undefined || value === "") return null;
@@ -58,31 +31,6 @@ function DetailRow({ label, value }: { label: string; value: string | number | n
       <Text style={styles.detailValue} selectable>
         {value}
       </Text>
-    </View>
-  );
-}
-
-function HeaderDataCard({ item, tint }: { item: SampleHeaderData; tint: string }) {
-  const range = formatRange(item);
-  const value = [item.Value, hasUnit(item.Uom) ? item.Uom : null].filter(Boolean).join(" ");
-  // The tag usually repeats the parameter name, so only show it when it differs.
-  const tag = item.Tag && item.Tag !== item.Param ? item.Tag : null;
-  return (
-    <View style={styles.paramCard}>
-      <View style={styles.paramTop}>
-        <Text style={styles.paramName} numberOfLines={2}>
-          {item.Param}
-        </Text>
-        <Text style={[styles.paramValue, { color: value ? tint : colors.textPlaceholder }]} selectable>
-          {value || "—"}
-        </Text>
-      </View>
-      {(tag || range) && (
-        <View style={styles.paramMeta}>
-          {tag ? <Text style={styles.paramMetaText}>Tag: {tag}</Text> : null}
-          {range ? <Text style={styles.paramMetaText}>Range: {range}</Text> : null}
-        </View>
-      )}
     </View>
   );
 }
@@ -106,7 +54,7 @@ export default function SampleDetailsDialog({ sample, tint, onClose }: Props) {
           <View style={[styles.sheet, { paddingBottom: insets.bottom + 16 }]}>
             <View style={styles.sheetHeader}>
               <View style={styles.sheetTitleBlock}>
-                <Text style={styles.sheetTitle}>{sample.Name}</Text>
+                <Text style={styles.sheetTitle}>{sampleTitle(sample)}</Text>
                 {sample.Description ? (
                   <Text style={styles.sheetSubtitle}>{sample.Description}</Text>
                 ) : null}
@@ -161,7 +109,7 @@ export default function SampleDetailsDialog({ sample, tint, onClose }: Props) {
               {headerData.length ? (
                 <View style={styles.paramList}>
                   {headerData.map((item, index) => (
-                    <HeaderDataCard key={`${item.Seq}-${item.Param}-${index}`} item={item} tint={tint} />
+                    <ParameterCard key={`${item.Seq}-${item.Param}-${index}`} item={item} tint={tint} />
                   ))}
                 </View>
               ) : (
@@ -267,39 +215,6 @@ const styles = StyleSheet.create({
   },
   paramList: {
     gap: 10,
-  },
-  paramCard: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 14,
-  },
-  paramTop: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 12,
-  },
-  paramName: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontSize: 15,
-    fontWeight: "600",
-  },
-  paramValue: {
-    flexShrink: 1,
-    fontSize: 15,
-    fontWeight: "700",
-    textAlign: "right",
-  },
-  paramMeta: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    columnGap: 14,
-    rowGap: 4,
-    marginTop: 6,
-  },
-  paramMetaText: {
-    color: colors.textSecondary,
-    fontSize: 12,
   },
   // Flat inside the sheet; the sheet already sits above the screen.
   emptyCard: {

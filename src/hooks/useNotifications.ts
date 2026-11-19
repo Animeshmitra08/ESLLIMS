@@ -34,6 +34,9 @@ const openNotificationTarget = ({ data }: OpenedNotification) => {
       pathname: "/form/[formid]",
       params: data.lab ? { formid, lab: data.lab } : { formid },
     });
+  } else if (data.labId) {
+    // New-sample notifications point to the sample's lab.
+    router.push({ pathname: "/lab/[id]", params: { id: data.labId } });
   } else {
     router.push("/notifications");
   }

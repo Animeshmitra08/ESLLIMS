@@ -44,7 +44,7 @@ const getFallback = (
 
 export default function HomeScreen() {
   const { user } = useAuth();
-  const { location, selectedPlant, loading, missing } = useHierarchy();
+  const { location, selectedPlant, loading, missing, allSamples } = useHierarchy();
   const fallback = missing ? getFallback(missing, location, selectedPlant) : null;
   const alert = useNotFoundAlert(missing ? `${missing}:${user?.companyId}` : null);
 
