@@ -101,7 +101,7 @@ export default function SamplesScreen() {
 
   const filtered = query.trim() !== "" || labId !== null;
 
-  console.log(visibleSamples.map((s) => s.SampleCode).join(", "));
+  // console.log(JSON.stringify(visibleSamples));
   
 
   return (

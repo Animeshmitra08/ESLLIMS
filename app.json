@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "icon": "./assets/expo.icon",
-      "bundleIdentifier": "com.aondigicon.esllims",
+      "bundleIdentifier": "com.aonDigicon.esllims",
       "googleServicesFile": "./GoogleService-Info.plist",
       "entitlements": {
         "aps-environment": "production"
@@ -23,12 +23,12 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "foregroundImage": "./assets/images/esl_logo.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.aondigicon.esllims",
+      "package": "com.aonDigicon.esllims",
       "permissions": [
         "android.permission.POST_NOTIFICATIONS"
       ],
@@ -44,7 +44,7 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#208AEF",
-          "image": "./assets/images/splash-icon.png",
+          "image": "./assets/images/icon.png",
           "imageWidth": 76
         }
       ],
@@ -68,7 +68,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "74c77560-af15-4bc7-ace7-a43ed2704f51"
+        "projectId": "6a2f2b03-8565-46cb-b6d3-bba667cb2870"
       }
     }
   }
